@@ -6,6 +6,7 @@ interface HUDProps {
 
 export default function HUD({ stats }: HUDProps) {
   const healthColor = stats.health > 50 ? "#00ff88" : stats.health > 25 ? "#ffaa00" : "#ff3344";
+  const isKnife = stats.weapon === "Knife";
 
   return (
     <div style={{
@@ -15,7 +16,7 @@ export default function HUD({ stats }: HUDProps) {
       fontFamily: "'Segoe UI', sans-serif",
       color: "#fff",
     }}>
-      {/* Crosshair */}
+      {/* Crosshair — smaller dot for knife */}
       <div style={{
         position: "absolute",
         left: "50%",
@@ -24,9 +25,24 @@ export default function HUD({ stats }: HUDProps) {
         width: "20px",
         height: "20px",
       }}>
-        <div style={{ position: "absolute", left: "50%", top: "50%", width: "2px", height: "10px", background: "#00ff88", transform: "translate(-50%, -50%)" }} />
-        <div style={{ position: "absolute", left: "50%", top: "50%", width: "10px", height: "2px", background: "#00ff88", transform: "translate(-50%, -50%)" }} />
-        <div style={{ position: "absolute", left: "50%", top: "50%", width: "4px", height: "4px", borderRadius: "50%", border: "1.5px solid #00ff88", transform: "translate(-50%, -50%)", background: "transparent" }} />
+        {isKnife ? (
+          <div style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            border: "2px solid #ffcc44",
+            transform: "translate(-50%, -50%)",
+          }} />
+        ) : (
+          <>
+            <div style={{ position: "absolute", left: "50%", top: "50%", width: "2px", height: "10px", background: "#00ff88", transform: "translate(-50%, -50%)" }} />
+            <div style={{ position: "absolute", left: "50%", top: "50%", width: "10px", height: "2px", background: "#00ff88", transform: "translate(-50%, -50%)" }} />
+            <div style={{ position: "absolute", left: "50%", top: "50%", width: "4px", height: "4px", borderRadius: "50%", border: "1.5px solid #00ff88", transform: "translate(-50%, -50%)", background: "transparent" }} />
+          </>
+        )}
       </div>
 
       {/* Round indicator - top center */}
@@ -72,6 +88,35 @@ export default function HUD({ stats }: HUDProps) {
         </div>
       )}
 
+      {/* Weapon switcher hint - bottom center */}
+      <div style={{
+        position: "absolute",
+        bottom: "24px",
+        left: "50%",
+        transform: "translateX(-50%)",
+        display: "flex",
+        gap: "8px",
+        alignItems: "center",
+      }}>
+        {(["AK-47", "Knife"] as const).map((w) => (
+          <div key={w} style={{
+            background: stats.weapon === w ? "rgba(255,106,0,0.2)" : "rgba(0,0,0,0.4)",
+            border: `1px solid ${stats.weapon === w ? "#ff6a00" : "rgba(255,255,255,0.1)"}`,
+            borderRadius: "5px",
+            padding: "5px 12px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "2px",
+            transition: "all 0.15s ease",
+          }}>
+            <span style={{ fontSize: "14px" }}>{w === "AK-47" ? "🔫" : "🔪"}</span>
+            <span style={{ fontSize: "9px", color: stats.weapon === w ? "#ff6a00" : "#555", letterSpacing: "1px", textTransform: "uppercase" }}>{w}</span>
+          </div>
+        ))}
+        <span style={{ fontSize: "10px", color: "#444", letterSpacing: "1px" }}>Q</span>
+      </div>
+
       {/* Bottom left - Health & Armor */}
       <div style={{
         position: "absolute",
@@ -81,44 +126,17 @@ export default function HUD({ stats }: HUDProps) {
         flexDirection: "column",
         gap: "6px",
       }}>
-        {/* Health */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ fontSize: "11px", color: "#666", letterSpacing: "1px", width: "12px" }}>♥</div>
-          <div style={{
-            width: "120px",
-            height: "4px",
-            background: "rgba(255,255,255,0.1)",
-            borderRadius: "2px",
-            overflow: "hidden",
-          }}>
-            <div style={{
-              width: `${stats.health}%`,
-              height: "100%",
-              background: healthColor,
-              transition: "width 0.15s ease",
-              borderRadius: "2px",
-            }} />
+          <div style={{ fontSize: "11px", color: "#666", width: "12px" }}>♥</div>
+          <div style={{ width: "120px", height: "4px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
+            <div style={{ width: `${stats.health}%`, height: "100%", background: healthColor, transition: "width 0.15s ease", borderRadius: "2px" }} />
           </div>
           <span style={{ fontSize: "18px", fontWeight: 700, color: healthColor, minWidth: "36px" }}>{stats.health}</span>
         </div>
-
-        {/* Armor */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ fontSize: "11px", color: "#666", letterSpacing: "1px", width: "12px" }}>⬡</div>
-          <div style={{
-            width: "120px",
-            height: "4px",
-            background: "rgba(255,255,255,0.1)",
-            borderRadius: "2px",
-            overflow: "hidden",
-          }}>
-            <div style={{
-              width: `${stats.armor}%`,
-              height: "100%",
-              background: "#4488ff",
-              transition: "width 0.15s ease",
-              borderRadius: "2px",
-            }} />
+          <div style={{ fontSize: "11px", color: "#666", width: "12px" }}>⬡</div>
+          <div style={{ width: "120px", height: "4px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
+            <div style={{ width: `${stats.armor}%`, height: "100%", background: "#4488ff", transition: "width 0.15s ease", borderRadius: "2px" }} />
           </div>
           <span style={{ fontSize: "16px", fontWeight: 600, color: "#4488ff", minWidth: "36px" }}>{stats.armor}</span>
         </div>
@@ -131,46 +149,55 @@ export default function HUD({ stats }: HUDProps) {
         right: "24px",
         textAlign: "right",
       }}>
-        <div style={{ fontSize: "11px", color: "#666", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
+        <div style={{ fontSize: "11px", color: isKnife ? "#ffcc44" : "#666", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px", transition: "color 0.2s" }}>
           {stats.weapon}
         </div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "6px", justifyContent: "flex-end" }}>
-          <span style={{
-            fontSize: "36px",
-            fontWeight: 800,
-            color: stats.ammo <= 5 ? "#ff3344" : "#fff",
-            lineHeight: 1,
-            transition: "color 0.2s",
-          }}>
-            {stats.ammo}
-          </span>
-          <span style={{ fontSize: "16px", color: "#555", marginBottom: "2px" }}>/</span>
-          <span style={{ fontSize: "18px", color: "#666" }}>{stats.totalAmmo}</span>
-        </div>
-        {stats.isReloading && (
+
+        {isKnife ? (
           <div style={{
-            fontSize: "11px",
-            color: "#ffaa00",
-            letterSpacing: "3px",
-            textTransform: "uppercase",
-            animation: "pulse 0.6s ease-in-out infinite",
-          }}>
-            Reloading...
-          </div>
-        )}
-        {stats.ammo === 0 && !stats.isReloading && (
-          <div style={{
-            fontSize: "11px",
-            color: "#ff3344",
+            fontSize: "13px",
+            color: "#ffcc44",
             letterSpacing: "2px",
             textTransform: "uppercase",
+            marginTop: "4px",
           }}>
-            Press R to reload
+            Click to stab
           </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", alignItems: "baseline", gap: "6px", justifyContent: "flex-end" }}>
+              <span style={{
+                fontSize: "36px",
+                fontWeight: 800,
+                color: stats.ammo <= 5 ? "#ff3344" : "#fff",
+                lineHeight: 1,
+                transition: "color 0.2s",
+              }}>
+                {stats.ammo}
+              </span>
+              <span style={{ fontSize: "16px", color: "#555", marginBottom: "2px" }}>/</span>
+              <span style={{ fontSize: "18px", color: "#666" }}>{stats.totalAmmo}</span>
+            </div>
+            {stats.isReloading && (
+              <div style={{
+                fontSize: "11px",
+                color: "#ffaa00",
+                letterSpacing: "3px",
+                textTransform: "uppercase",
+                animation: "pulse 0.6s ease-in-out infinite",
+              }}>
+                Reloading...
+              </div>
+            )}
+            {stats.ammo === 0 && !stats.isReloading && (
+              <div style={{ fontSize: "11px", color: "#ff3344", letterSpacing: "2px", textTransform: "uppercase" }}>
+                Press R to reload
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Hit indicator */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }

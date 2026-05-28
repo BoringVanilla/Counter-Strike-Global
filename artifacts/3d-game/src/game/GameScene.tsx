@@ -15,6 +15,9 @@ interface GameSceneProps {
   onWon: () => void;
 }
 
+const KNIFE_RANGE = 2.2;
+const KNIFE_DAMAGE = 55;
+
 const ROUNDS_CONFIG = [
   { enemies: 3 },
   { enemies: 4 },
@@ -104,6 +107,24 @@ export default function GameScene({ stats, setStats, onDied, onWon }: GameSceneP
   const handlePlayerShoot = useCallback((pos: THREE.Vector3, dir: THREE.Vector3) => {
     spawnBullet(pos, dir, false);
   }, [spawnBullet]);
+
+  const handleKnifeStab = useCallback((pos: THREE.Vector3, _dir: THREE.Vector3) => {
+    setEnemies(prev => prev.map(e => {
+      if (e.isDead) return e;
+      const dx = e.position[0] - pos.x;
+      const dz = e.position[2] - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < KNIFE_RANGE) {
+        const newHealth = e.health - KNIFE_DAMAGE;
+        const isDead = newHealth <= 0;
+        if (isDead) {
+          setStats(s => ({ ...s, kills: s.kills + 1, score: s.score + 500 }));
+        }
+        return { ...e, health: newHealth, isDead, state: isDead ? "dying" as const : "chase" as const };
+      }
+      return e;
+    }));
+  }, [setStats]);
 
   useFrame((_, delta) => {
     if (isDiedRef.current || roundTransitionRef.current) return;
@@ -330,6 +351,7 @@ export default function GameScene({ stats, setStats, onDied, onWon }: GameSceneP
       <PlayerController
         playerPosRef={playerPosRef}
         onShoot={handlePlayerShoot}
+        onKnifeStab={handleKnifeStab}
         stats={stats}
         setStats={setStats}
       />

@@ -7,6 +7,7 @@ import Menu from "./Menu";
 import GameOver from "./GameOver";
 
 export type GameState = "menu" | "playing" | "dead" | "won";
+export type WeaponType = "AK-47" | "Knife";
 
 export interface GameStats {
   health: number;
@@ -17,7 +18,7 @@ export interface GameStats {
   round: number;
   totalRounds: number;
   score: number;
-  weapon: string;
+  weapon: WeaponType;
   isReloading: boolean;
 }
 
@@ -30,6 +31,7 @@ enum Controls {
   shoot = "shoot",
   reload = "reload",
   sprint = "sprint",
+  switchWeapon = "switchWeapon",
 }
 
 const keyMap = [
@@ -41,6 +43,7 @@ const keyMap = [
   { name: Controls.shoot, keys: ["Mouse0"] },
   { name: Controls.reload, keys: ["KeyR"] },
   { name: Controls.sprint, keys: ["ShiftLeft"] },
+  { name: Controls.switchWeapon, keys: ["KeyQ"] },
 ];
 
 export default function Game() {
@@ -74,25 +77,12 @@ export default function Game() {
     setGameState("playing");
   }, []);
 
-  const handleDied = useCallback(() => {
-    setGameState("dead");
-  }, []);
+  const handleDied = useCallback(() => setGameState("dead"), []);
+  const handleWon = useCallback(() => setGameState("won"), []);
 
-  const handleWon = useCallback(() => {
-    setGameState("won");
-  }, []);
-
-  if (gameState === "menu") {
-    return <Menu onStart={startGame} />;
-  }
-
-  if (gameState === "dead") {
-    return <GameOver won={false} score={stats.score} kills={stats.kills} onRestart={startGame} />;
-  }
-
-  if (gameState === "won") {
-    return <GameOver won={true} score={stats.score} kills={stats.kills} onRestart={startGame} />;
-  }
+  if (gameState === "menu") return <Menu onStart={startGame} />;
+  if (gameState === "dead") return <GameOver won={false} score={stats.score} kills={stats.kills} onRestart={startGame} />;
+  if (gameState === "won") return <GameOver won={true} score={stats.score} kills={stats.kills} onRestart={startGame} />;
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", background: "#000" }}>
