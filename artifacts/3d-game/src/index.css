@@ -1,0 +1,21 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #000;
+  overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
+  user-select: none;
+}
+
+canvas {
+  display: block;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
