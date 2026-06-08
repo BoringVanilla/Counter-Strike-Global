@@ -22,46 +22,54 @@ const KNIFE_RANGE = 2.2;
 const KNIFE_DAMAGE = 55;
 
 const ROUNDS_CONFIG = [
-  { enemies: 3 },
-  { enemies: 4 },
-  { enemies: 5 },
-  { enemies: 6 },
-  { enemies: 8 },
+  { enemies: 3, frontOnly: true  }, // Round 1 — all in front
+  { enemies: 4, frontOnly: true  }, // Round 2 — still in front
+  { enemies: 5, frontOnly: false }, // Round 3+ — all directions
+  { enemies: 6, frontOnly: false },
+  { enemies: 8, frontOnly: false },
 ];
 
-let enemyIdCounter = 0;
-let bulletIdCounter = 0;
-let hitEffectIdCounter = 0;
+// Start from random offsets so HMR reloads don't cause key collisions with
+// enemies/bullets still alive in React state from the previous module instance.
+let enemyIdCounter = Math.round(Math.random() * 1e9);
+let bulletIdCounter = Math.round(Math.random() * 1e9);
+let hitEffectIdCounter = Math.round(Math.random() * 1e9);
 
-const SPAWN_POINTS: [number, number, number][] = [
-  [18, 1, 0], [-18, 1, 0], [0, 1, 18], [0, 1, -18],
-  [15, 1, 15], [-15, 1, 15], [15, 1, -15], [-15, 1, -15],
-  [10, 1, 10], [-10, 1, -10],
+// Player starts at (4, 1.7, 0) facing +Z (Math.PI yaw).
+// FRONT = positive Z half, BACK = negative Z half.
+const FRONT_SPAWNS: [number, number, number][] = [
+  [0, 1, 18], [14, 1, 14], [-14, 1, 14],
+  [18, 1, 5], [-18, 1, 5], [8, 1, 12], [-8, 1, 12],
+];
+const ALL_SPAWNS: [number, number, number][] = [
+  ...FRONT_SPAWNS,
+  [18, 1, -5], [-18, 1, -5],
+  [14, 1, -14], [-14, 1, -14],
+  [0, 1, -18], [8, 1, -12], [-8, 1, -12],
 ];
 
-function spawnEnemies(count: number): EnemyType[] {
-  const enemies: EnemyType[] = [];
-  const shuffled = [...SPAWN_POINTS].sort(() => Math.random() - 0.5);
-  for (let i = 0; i < count; i++) {
+function spawnEnemies(count: number, frontOnly: boolean): EnemyType[] {
+  const pool = frontOnly ? FRONT_SPAWNS : ALL_SPAWNS;
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return Array.from({ length: count }, (_, i) => {
     const sp = shuffled[i % shuffled.length];
-    enemies.push({
+    return {
       id: ++enemyIdCounter,
-      position: [sp[0] + (Math.random() - 0.5) * 2, 1, sp[2] + (Math.random() - 0.5) * 2],
+      position: [sp[0] + (Math.random() - 0.5) * 2, 1, sp[2] + (Math.random() - 0.5) * 2] as [number, number, number],
       health: 100,
       maxHealth: 100,
       isDead: false,
-      state: "patrol",
-      patrolTarget: [sp[0], sp[2]],
+      state: "patrol" as const,
+      patrolTarget: [sp[0], sp[2]] as [number, number],
       lastShotTime: 0,
       lastHitTime: 0,
-    });
-  }
-  return enemies;
+    };
+  });
 }
 
 export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: GameSceneProps) {
   const { camera } = useThree();
-  const [enemies, setEnemies] = useState<EnemyType[]>(() => spawnEnemies(ROUNDS_CONFIG[0].enemies));
+  const [enemies, setEnemies] = useState<EnemyType[]>(() => spawnEnemies(ROUNDS_CONFIG[0].enemies, ROUNDS_CONFIG[0].frontOnly));
   const [bullets, setBullets] = useState<BulletType[]>([]);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
   const [roundTransition, setRoundTransition] = useState(false);
@@ -76,9 +84,10 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
   roundTransitionRef.current = roundTransition;
 
   useEffect(() => {
-    // Start position avoids the center corridor wall (x:-0.3–0.3, z:-6–6)
-    camera.position.set(3, 1.7, -2);
-    playerPosRef.current.set(3, 1.7, -2);
+    // Start at x=4, z=0 facing +Z (INITIAL_YAW = Math.PI).
+    // Clear of the center corridor wall (x: -0.3–0.3, z: -6–6).
+    camera.position.set(4, 1.7, 0);
+    playerPosRef.current.set(4, 1.7, 0);
   }, [camera]);
 
   const spawnBullet = useCallback((pos: THREE.Vector3, dir: THREE.Vector3, fromEnemy: boolean) => {
@@ -302,7 +311,7 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
             totalAmmo: 90,
             score: s.score + 500,
           }));
-          setEnemies(spawnEnemies(config.enemies));
+          setEnemies(spawnEnemies(config.enemies, config.frontOnly));
           setBullets([]);
           setHitEffects([]);
           setRoundTransition(false);

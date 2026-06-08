@@ -2,7 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useKeyboardControls } from "@react-three/drei";
 import * as THREE from "three";
-import { GameStats, WeaponType } from "./Game";
+import { GameStats, WeaponType, FireMode } from "./Game";
 import WeaponModel from "./WeaponModel";
 import KnifeModel from "./KnifeModel";
 import { resolveCollisions } from "./mapColliders";
@@ -37,22 +37,39 @@ const BOB_FREQ = 10;
 const BOB_AMP = 0.03;
 const MOUSE_SENSITIVITY = 0.0015;
 
+// Fire mode cooldowns in ms
+const FIRE_COOLDOWN: Record<FireMode, number> = {
+  auto: 90,
+  semi: 180,
+  single: 600,
+};
+
+// Bullet spread per mode
+const FIRE_SPREAD: Record<FireMode, number> = {
+  auto: 0.014,
+  semi: 0.007,
+  single: 0.002,
+};
+
+const INITIAL_YAW = Math.PI; // Player faces +Z (toward center)
+
 export default function PlayerController({
   playerPosRef, onShoot, onKnifeStab, stats, setStats,
 }: PlayerControllerProps) {
   const { camera, gl } = useThree();
   const [, getKeys] = useKeyboardControls<Controls>();
 
-  const yawRef = useRef(0);
+  const yawRef = useRef(INITIAL_YAW);
   const pitchRef = useRef(0);
   const velYRef = useRef(0);
   const onGroundRef = useRef(true);
   const isLockedRef = useRef(false);
-  const lastShotRef = useRef(0);
+  const lastShotMsRef = useRef(0);
   const lastKnifeRef = useRef(0);
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statsRef = useRef(stats);
   const qWasDownRef = useRef(false);
+  const mouseDownRef = useRef(false);
 
   // Head bob
   const bobTimeRef = useRef(0);
@@ -64,11 +81,28 @@ export default function PlayerController({
   const shakeRef = useRef(0);
   const lastDamageFlashRef = useRef(0);
 
+  const [locked, setLocked] = useState(false);
+  const [isShooting, setIsShootingState] = useState(false);
+  const [isStabbing, setIsStabbing] = useState(false);
+
   statsRef.current = stats;
 
-  const [locked, setLocked] = useState(false);
-  const [isShooting, setIsShooting] = useState(false);
-  const [isStabbing, setIsStabbing] = useState(false);
+  // Fire one bullet
+  const fireOnce = (spread: number) => {
+    const s = statsRef.current;
+    if (s.ammo <= 0 || s.isReloading || s.weapon !== "AK-47") return false;
+    setStats(prev => ({ ...prev, ammo: Math.max(0, prev.ammo - 1) }));
+    shakeRef.current = Math.max(shakeRef.current, 0.04);
+    setIsShootingState(true);
+    setTimeout(() => setIsShootingState(false), 80);
+    const pos = camera.position.clone();
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    dir.x += (Math.random() - 0.5) * spread;
+    dir.y += (Math.random() - 0.5) * spread;
+    dir.normalize();
+    onShoot(pos, dir);
+    return true;
+  };
 
   // Pointer lock
   useEffect(() => {
@@ -82,6 +116,7 @@ export default function PlayerController({
     const onLockChange = () => {
       const isLocked = document.pointerLockElement === canvas;
       isLockedRef.current = isLocked;
+      if (!isLocked) mouseDownRef.current = false;
       setLocked(isLocked);
     };
     const onClick = () => { if (!isLockedRef.current) canvas.requestPointerLock(); };
@@ -95,10 +130,11 @@ export default function PlayerController({
     };
   }, [gl]);
 
-  // Mouse shoot / stab
+  // Mouse down/up
   useEffect(() => {
-    const handleMouseDown = (e: MouseEvent) => {
+    const onDown = (e: MouseEvent) => {
       if (!isLockedRef.current || e.button !== 0) return;
+      mouseDownRef.current = true;
       const s = statsRef.current;
       if (s.weapon === "Knife") {
         const now = Date.now();
@@ -108,29 +144,29 @@ export default function PlayerController({
         setTimeout(() => setIsStabbing(false), 300);
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
         onKnifeStab(camera.position.clone(), dir);
-      } else {
-        if (s.ammo <= 0 || s.isReloading) return;
+        return;
+      }
+      // Semi / single: fire immediately on click, auto fires via useFrame
+      const mode = s.fireMode;
+      if (mode !== "auto") {
         const now = Date.now();
-        if (now - lastShotRef.current < 90) return;
-        lastShotRef.current = now;
-        setIsShooting(true);
-        setTimeout(() => setIsShooting(false), 80);
-        setStats(prev => ({ ...prev, ammo: Math.max(0, prev.ammo - 1) }));
-        shakeRef.current = Math.max(shakeRef.current, 0.04);
-        const pos = camera.position.clone();
-        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-        const spread = 0.012;
-        dir.x += (Math.random() - 0.5) * spread;
-        dir.y += (Math.random() - 0.5) * spread;
-        dir.normalize();
-        onShoot(pos, dir);
+        if (now - lastShotMsRef.current < FIRE_COOLDOWN[mode]) return;
+        lastShotMsRef.current = now;
+        fireOnce(FIRE_SPREAD[mode]);
       }
     };
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [camera, onShoot, onKnifeStab, setStats]);
+    const onUp = (e: MouseEvent) => {
+      if (e.button === 0) mouseDownRef.current = false;
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [camera, onShoot, onKnifeStab]);
 
-  // Reload key
+  // Keyboard: R = reload, F = cycle fire mode, Q handled in useFrame
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "KeyR") {
@@ -144,6 +180,14 @@ export default function PlayerController({
             return { ...prev, ammo: prev.ammo + take, totalAmmo: prev.totalAmmo - take, isReloading: false };
           });
         }, RELOAD_TIME);
+      }
+      if (e.code === "KeyF") {
+        setStats(prev => {
+          const order: FireMode[] = ["auto", "semi", "single"];
+          const idx = order.indexOf(prev.fireMode);
+          const next = order[(idx + 1) % order.length];
+          return { ...prev, fireMode: next };
+        });
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -174,18 +218,28 @@ export default function PlayerController({
     const keys = getKeys();
     const isSprinting = keys.sprint;
 
-    // Weapon switch (Q - edge detection)
+    // Weapon switch Q (edge detection)
     const qDown = keys.switchWeapon;
     if (qDown && !qWasDownRef.current) {
       setStats(prev => {
         const next: WeaponType = prev.weapon === "AK-47" ? "Knife" : "AK-47";
         return { ...prev, weapon: next, isReloading: false };
       });
+      mouseDownRef.current = false;
       if (reloadTimerRef.current) { clearTimeout(reloadTimerRef.current); reloadTimerRef.current = null; }
     }
     qWasDownRef.current = qDown;
 
-    // Damage flash → camera shake
+    // Auto-fire in frame loop
+    if (mouseDownRef.current && statsRef.current.fireMode === "auto" && statsRef.current.weapon === "AK-47") {
+      const now = Date.now();
+      if (now - lastShotMsRef.current >= FIRE_COOLDOWN.auto) {
+        lastShotMsRef.current = now;
+        fireOnce(FIRE_SPREAD.auto);
+      }
+    }
+
+    // Damage flash → shake
     if (stats.damageFlash !== lastDamageFlashRef.current) {
       lastDamageFlashRef.current = stats.damageFlash;
       shakeRef.current = 0.13;
@@ -198,7 +252,7 @@ export default function PlayerController({
     const euler = new THREE.Euler(pitchRef.current, yawRef.current, 0, "YXZ");
     camera.quaternion.setFromEuler(euler);
 
-    // Movement vectors (horizontal only)
+    // Movement vectors
     const fwdX = -Math.sin(yawRef.current);
     const fwdZ = -Math.cos(yawRef.current);
     const rgtX =  Math.cos(yawRef.current);
@@ -217,7 +271,6 @@ export default function PlayerController({
     const baseSpeed = stats.weapon === "Knife" ? KNIFE_SPRINT_SPEED : MOVE_SPEED;
     const speed = isSprinting ? Math.max(baseSpeed, SPRINT_SPEED) : baseSpeed;
 
-    // Apply movement then resolve collisions
     let px = playerPosRef.current.x + moveX * speed * dt;
     let pz = playerPosRef.current.z + moveZ * speed * dt;
     [px, pz] = resolveCollisions(px, pz, PLAYER_RADIUS);
@@ -227,14 +280,12 @@ export default function PlayerController({
       velYRef.current = JUMP_FORCE;
       onGroundRef.current = false;
     }
-
-    // Gravity + vertical
     velYRef.current += GRAVITY * dt;
     let py = playerPosRef.current.y + velYRef.current * dt;
 
     const wasGrounded = wasOnGroundRef.current;
     if (py <= PLAYER_HEIGHT) {
-      if (!wasGrounded) landBounceRef.current = -0.04; // landing dip
+      if (!wasGrounded) landBounceRef.current = -0.04;
       py = PLAYER_HEIGHT;
       velYRef.current = 0;
       onGroundRef.current = true;
@@ -250,13 +301,9 @@ export default function PlayerController({
       bobYRef.current *= Math.pow(0.001, dt);
     }
 
-    // Air wobble
     const airWobble = onGroundRef.current ? 0 : Math.sin(t * 5) * 0.004;
 
-    // Write logical position (no shake/bob offsets)
     playerPosRef.current.set(px, py, pz);
-
-    // Apply full camera position (logical + visual offsets)
     camera.position.set(
       px + shakeX,
       py + bobYRef.current + landBounceRef.current + airWobble,

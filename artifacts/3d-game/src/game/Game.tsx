@@ -9,6 +9,7 @@ import PauseMenu from "./PauseMenu";
 
 export type GameState = "menu" | "playing" | "paused" | "dead" | "won";
 export type WeaponType = "AK-47" | "Knife";
+export type FireMode = "auto" | "semi" | "single";
 
 export interface GameStats {
   health: number;
@@ -22,6 +23,7 @@ export interface GameStats {
   weapon: WeaponType;
   isReloading: boolean;
   damageFlash: number;
+  fireMode: FireMode;
 }
 
 enum Controls {
@@ -60,6 +62,7 @@ const DEFAULT_STATS: GameStats = {
   weapon: "AK-47",
   isReloading: false,
   damageFlash: 0,
+  fireMode: "auto",
 };
 
 export default function Game() {
@@ -84,23 +87,28 @@ export default function Game() {
     setGameState("playing");
   }, []);
 
+  const requestLock = useCallback(() => {
+    const canvas = document.querySelector("canvas");
+    if (!canvas) return;
+    // Browser requires ~500ms after ESC before re-locking
+    setTimeout(() => {
+      canvas.requestPointerLock().catch(() => {
+        // If still too soon, wait and retry once
+        setTimeout(() => canvas.requestPointerLock().catch(() => {}), 400);
+      });
+    }, 200);
+  }, []);
+
   const handleResume = useCallback(() => {
     setGameState("playing");
-    // Re-request pointer lock so the game resumes
-    setTimeout(() => {
-      const canvas = document.querySelector("canvas");
-      canvas?.requestPointerLock();
-    }, 50);
-  }, []);
+    requestLock();
+  }, [requestLock]);
 
   const handleRestart = useCallback(() => {
     setStats(DEFAULT_STATS);
     setGameState("playing");
-    setTimeout(() => {
-      const canvas = document.querySelector("canvas");
-      canvas?.requestPointerLock();
-    }, 100);
-  }, []);
+    requestLock();
+  }, [requestLock]);
 
   const handleExit = useCallback(() => {
     document.exitPointerLock();
