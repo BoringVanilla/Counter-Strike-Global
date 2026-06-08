@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { GameStats } from "./Game";
 import { Enemy as EnemyType, Bullet as BulletType, HitEffect } from "./types";
+import { resolveCollisions } from "./mapColliders";
 import Map from "./Map";
 import EnemyMesh from "./EnemyMesh";
 import BulletMesh from "./BulletMesh";
@@ -75,8 +76,9 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
   roundTransitionRef.current = roundTransition;
 
   useEffect(() => {
-    camera.position.set(0, 1.7, 0);
-    playerPosRef.current.set(0, 1.7, 0);
+    // Start position avoids the center corridor wall (x:-0.3–0.3, z:-6–6)
+    camera.position.set(3, 1.7, -2);
+    playerPosRef.current.set(3, 1.7, -2);
   }, [camera]);
 
   const spawnBullet = useCallback((pos: THREE.Vector3, dir: THREE.Vector3, fromEnemy: boolean) => {
@@ -250,25 +252,27 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
         }
         if (distToPlayer > 3) {
           const speed = 2.5 * dt;
-          newPos = [
-            Math.max(-21, Math.min(21, ex + (dx / distToPlayer) * speed)),
-            e.position[1],
-            Math.max(-21, Math.min(21, ez + (dz / distToPlayer) * speed)),
-          ];
+          let nx = ex + (dx / distToPlayer) * speed;
+          let nz = ez + (dz / distToPlayer) * speed;
+          [nx, nz] = resolveCollisions(nx, nz, 0.35);
+          newPos = [nx, e.position[1], nz];
         }
       } else {
         const ptx = newPatrol[0] - ex;
         const ptz = newPatrol[1] - ez;
         const ptDist = Math.sqrt(ptx * ptx + ptz * ptz);
         if (ptDist < 1) {
-          newPatrol = [(Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30];
+          // Pick new patrol point away from walls
+          let px = (Math.random() - 0.5) * 36;
+          let pz = (Math.random() - 0.5) * 36;
+          [px, pz] = resolveCollisions(px, pz, 0.5);
+          newPatrol = [px, pz];
         } else {
           const speed = 1.5 * dt;
-          newPos = [
-            Math.max(-21, Math.min(21, ex + (ptx / ptDist) * speed)),
-            e.position[1],
-            Math.max(-21, Math.min(21, ez + (ptz / ptDist) * speed)),
-          ];
+          let nx = ex + (ptx / ptDist) * speed;
+          let nz = ez + (ptz / ptDist) * speed;
+          [nx, nz] = resolveCollisions(nx, nz, 0.35);
+          newPos = [nx, e.position[1], nz];
         }
       }
 

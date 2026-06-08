@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { GameStats, WeaponType } from "./Game";
 import WeaponModel from "./WeaponModel";
 import KnifeModel from "./KnifeModel";
+import { resolveCollisions } from "./mapColliders";
 
 enum Controls {
   forward = "forward",
@@ -25,18 +26,16 @@ interface PlayerControllerProps {
 }
 
 const PLAYER_HEIGHT = 1.7;
+const PLAYER_RADIUS = 0.38;
 const MOVE_SPEED = 8;
 const SPRINT_SPEED = 13;
 const KNIFE_SPRINT_SPEED = 16;
-const JUMP_FORCE = 6;
-const GRAVITY = -18;
+const JUMP_FORCE = 6.5;
+const GRAVITY = -15;
 const RELOAD_TIME = 2000;
 const BOB_FREQ = 10;
-const BOB_AMP = 0.032;
-
-function clampToMap(x: number, z: number): [number, number] {
-  return [Math.max(-21.5, Math.min(21.5, x)), Math.max(-21.5, Math.min(21.5, z))];
-}
+const BOB_AMP = 0.03;
+const MOUSE_SENSITIVITY = 0.0015;
 
 export default function PlayerController({
   playerPosRef, onShoot, onKnifeStab, stats, setStats,
@@ -46,8 +45,8 @@ export default function PlayerController({
 
   const yawRef = useRef(0);
   const pitchRef = useRef(0);
-  const velocityY = useRef(0);
-  const onGround = useRef(true);
+  const velYRef = useRef(0);
+  const onGroundRef = useRef(true);
   const isLockedRef = useRef(false);
   const lastShotRef = useRef(0);
   const lastKnifeRef = useRef(0);
@@ -55,19 +54,14 @@ export default function PlayerController({
   const statsRef = useRef(stats);
   const qWasDownRef = useRef(false);
 
-  // Head bob state
+  // Head bob
   const bobTimeRef = useRef(0);
-  const bobTargetRef = useRef(0);
-  const bobCurrentRef = useRef(0);
-  const landBounceRef = useRef(0);
+  const bobYRef = useRef(0);
   const wasOnGroundRef = useRef(true);
+  const landBounceRef = useRef(0);
 
   // Camera shake
   const shakeRef = useRef(0);
-  const shakeXRef = useRef(0);
-  const shakeYRef = useRef(0);
-
-  // Track damage flash changes for shake trigger
   const lastDamageFlashRef = useRef(0);
 
   statsRef.current = stats;
@@ -81,10 +75,9 @@ export default function PlayerController({
     const canvas = gl.domElement;
     const onMouseMove = (e: MouseEvent) => {
       if (!isLockedRef.current) return;
-      const sens = 0.0018;
-      yawRef.current -= e.movementX * sens;
-      pitchRef.current -= e.movementY * sens;
-      pitchRef.current = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchRef.current));
+      yawRef.current -= e.movementX * MOUSE_SENSITIVITY;
+      pitchRef.current -= e.movementY * MOUSE_SENSITIVITY;
+      pitchRef.current = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitchRef.current));
     };
     const onLockChange = () => {
       const isLocked = document.pointerLockElement === canvas;
@@ -123,7 +116,6 @@ export default function PlayerController({
         setIsShooting(true);
         setTimeout(() => setIsShooting(false), 80);
         setStats(prev => ({ ...prev, ammo: Math.max(0, prev.ammo - 1) }));
-        // Camera shake on shoot
         shakeRef.current = Math.max(shakeRef.current, 0.04);
         const pos = camera.position.clone();
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
@@ -138,7 +130,7 @@ export default function PlayerController({
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [camera, onShoot, onKnifeStab, setStats]);
 
-  // Reload keybinding
+  // Reload key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "KeyR") {
@@ -161,7 +153,7 @@ export default function PlayerController({
     };
   }, [setStats]);
 
-  // Auto-reload
+  // Auto-reload on empty
   useEffect(() => {
     if (stats.ammo === 0 && !stats.isReloading && stats.totalAmmo > 0 && stats.weapon === "AK-47") {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
@@ -182,7 +174,7 @@ export default function PlayerController({
     const keys = getKeys();
     const isSprinting = keys.sprint;
 
-    // Q weapon switch (edge detection)
+    // Weapon switch (Q - edge detection)
     const qDown = keys.switchWeapon;
     if (qDown && !qWasDownRef.current) {
       setStats(prev => {
@@ -193,80 +185,83 @@ export default function PlayerController({
     }
     qWasDownRef.current = qDown;
 
-    // Detect damage for camera shake
+    // Damage flash → camera shake
     if (stats.damageFlash !== lastDamageFlashRef.current) {
       lastDamageFlashRef.current = stats.damageFlash;
-      shakeRef.current = 0.14;
+      shakeRef.current = 0.13;
     }
+    shakeRef.current *= Math.pow(0.001, dt);
+    const shakeX = (Math.random() - 0.5) * shakeRef.current;
+    const shakeY = (Math.random() - 0.5) * shakeRef.current;
 
-    // Decay shake
-    shakeRef.current = THREE.MathUtils.lerp(shakeRef.current, 0, 1 - Math.pow(0.001, dt));
-    shakeXRef.current = (Math.random() - 0.5) * shakeRef.current;
-    shakeYRef.current = (Math.random() - 0.5) * shakeRef.current;
-
-    // Camera rotation
+    // Camera orientation
     const euler = new THREE.Euler(pitchRef.current, yawRef.current, 0, "YXZ");
     camera.quaternion.setFromEuler(euler);
 
-    // Movement
-    const forward = new THREE.Vector3(-Math.sin(yawRef.current), 0, -Math.cos(yawRef.current));
-    const right = new THREE.Vector3(Math.cos(yawRef.current), 0, -Math.sin(yawRef.current));
+    // Movement vectors (horizontal only)
+    const fwdX = -Math.sin(yawRef.current);
+    const fwdZ = -Math.cos(yawRef.current);
+    const rgtX =  Math.cos(yawRef.current);
+    const rgtZ = -Math.sin(yawRef.current);
 
     let moveX = 0, moveZ = 0;
-    if (keys.forward) { moveX += forward.x; moveZ += forward.z; }
-    if (keys.back)    { moveX -= forward.x; moveZ -= forward.z; }
-    if (keys.left)    { moveX -= right.x;   moveZ -= right.z; }
-    if (keys.right)   { moveX += right.x;   moveZ += right.z; }
+    if (keys.forward) { moveX += fwdX; moveZ += fwdZ; }
+    if (keys.back)    { moveX -= fwdX; moveZ -= fwdZ; }
+    if (keys.left)    { moveX -= rgtX; moveZ -= rgtZ; }
+    if (keys.right)   { moveX += rgtX; moveZ += rgtZ; }
 
     const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
-    const isMoving = len > 0;
+    const isMoving = len > 0.001;
     if (isMoving) { moveX /= len; moveZ /= len; }
 
     const baseSpeed = stats.weapon === "Knife" ? KNIFE_SPRINT_SPEED : MOVE_SPEED;
     const speed = isSprinting ? Math.max(baseSpeed, SPRINT_SPEED) : baseSpeed;
-    let nx = camera.position.x + moveX * speed * dt;
-    let nz = camera.position.z + moveZ * speed * dt;
+
+    // Apply movement then resolve collisions
+    let px = playerPosRef.current.x + moveX * speed * dt;
+    let pz = playerPosRef.current.z + moveZ * speed * dt;
+    [px, pz] = resolveCollisions(px, pz, PLAYER_RADIUS);
 
     // Jump
-    if (keys.jump && onGround.current) {
-      velocityY.current = JUMP_FORCE;
-      onGround.current = false;
+    if (keys.jump && onGroundRef.current) {
+      velYRef.current = JUMP_FORCE;
+      onGroundRef.current = false;
     }
 
-    // Gravity
-    velocityY.current += GRAVITY * dt;
-    let ny = camera.position.y + velocityY.current * dt;
+    // Gravity + vertical
+    velYRef.current += GRAVITY * dt;
+    let py = playerPosRef.current.y + velYRef.current * dt;
 
-    // Landing bounce
     const wasGrounded = wasOnGroundRef.current;
-    if (ny <= PLAYER_HEIGHT) {
-      if (!wasGrounded) landBounceRef.current = -0.05; // landing dip
-      ny = PLAYER_HEIGHT;
-      velocityY.current = 0;
-      onGround.current = true;
+    if (py <= PLAYER_HEIGHT) {
+      if (!wasGrounded) landBounceRef.current = -0.04; // landing dip
+      py = PLAYER_HEIGHT;
+      velYRef.current = 0;
+      onGroundRef.current = true;
     }
-    wasOnGroundRef.current = onGround.current;
-    landBounceRef.current = THREE.MathUtils.lerp(landBounceRef.current, 0, 1 - Math.pow(0.001, dt));
+    wasOnGroundRef.current = onGroundRef.current;
+    landBounceRef.current *= Math.pow(0.0001, dt);
 
     // Head bob
-    if (isMoving && onGround.current) {
+    if (isMoving && onGroundRef.current) {
       bobTimeRef.current += dt * BOB_FREQ * (isSprinting ? 1.3 : 1);
-      bobTargetRef.current = Math.sin(bobTimeRef.current) * BOB_AMP;
+      bobYRef.current = Math.sin(bobTimeRef.current) * BOB_AMP;
     } else {
-      bobTargetRef.current = THREE.MathUtils.lerp(bobTargetRef.current, 0, 1 - Math.pow(0.001, dt));
+      bobYRef.current *= Math.pow(0.001, dt);
     }
-    bobCurrentRef.current = THREE.MathUtils.lerp(bobCurrentRef.current, bobTargetRef.current, 1 - Math.pow(0.0001, dt));
 
     // Air wobble
-    const airWobble = onGround.current ? 0 : Math.sin(t * 4) * 0.005;
+    const airWobble = onGroundRef.current ? 0 : Math.sin(t * 5) * 0.004;
 
-    const [cx, cz] = clampToMap(nx, nz);
+    // Write logical position (no shake/bob offsets)
+    playerPosRef.current.set(px, py, pz);
+
+    // Apply full camera position (logical + visual offsets)
     camera.position.set(
-      cx + shakeXRef.current,
-      ny + bobCurrentRef.current + landBounceRef.current + airWobble,
-      cz + shakeYRef.current * 0.5,
+      px + shakeX,
+      py + bobYRef.current + landBounceRef.current + airWobble,
+      pz + shakeY * 0.5,
     );
-    playerPosRef.current.set(cx, ny, cz);
   });
 
   if (!locked) return null;
