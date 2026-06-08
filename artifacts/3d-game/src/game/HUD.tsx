@@ -97,10 +97,8 @@ export default function HUD({ stats }: HUDProps) {
         borderRadius: "8px",
         padding: "8px 20px",
       }}>
-        <span style={{ fontSize: "11px", color: "#888", letterSpacing: "2px", textTransform: "uppercase" }}>Round</span>
+        <span style={{ fontSize: "11px", color: "#888", letterSpacing: "2px", textTransform: "uppercase" }}>Wave</span>
         <span style={{ fontSize: "18px", fontWeight: 700, color: "#ff6a00" }}>{stats.round}</span>
-        <span style={{ fontSize: "14px", color: "#444" }}>/</span>
-        <span style={{ fontSize: "14px", color: "#555" }}>{stats.totalRounds}</span>
         <div style={{ width: "1px", height: "16px", background: "rgba(255,255,255,0.1)" }} />
         <span style={{ fontSize: "11px", color: "#888", letterSpacing: "2px", textTransform: "uppercase" }}>Score</span>
         <span style={{ fontSize: "16px", fontWeight: 700, color: "#fff" }}>{stats.score.toLocaleString()}</span>

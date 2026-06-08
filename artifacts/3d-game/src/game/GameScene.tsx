@@ -14,23 +14,14 @@ interface GameSceneProps {
   stats: GameStats;
   setStats: React.Dispatch<React.SetStateAction<GameStats>>;
   onDied: () => void;
-  onWon: () => void;
   isPaused: boolean;
 }
 
 const KNIFE_RANGE = 2.2;
 const KNIFE_DAMAGE = 55;
-
-// 100 rounds — scales from 3 enemies (front-only) up to 12 enemies (all dirs)
-const ROUNDS_CONFIG: { enemies: number; frontOnly: boolean }[] = Array.from(
-  { length: 100 },
-  (_, i) => {
-    const round = i + 1;
-    const frontOnly = round <= 2;
-    const enemies = Math.min(12, 3 + Math.floor((round - 1) * 0.1));
-    return { enemies, frontOnly };
-  },
-);
+const WAVE_INTERVAL = 5;   // seconds between waves
+const WAVE_SIZE = 5;        // enemies per wave
+const DEAD_CLEANUP_MS = 3000; // remove corpses after 3s
 
 // Start from random offsets so HMR reloads don't cause key collisions with
 // enemies/bullets still alive in React state from the previous module instance.
@@ -70,24 +61,22 @@ function spawnEnemies(count: number, frontOnly: boolean): EnemyType[] {
   });
 }
 
-export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: GameSceneProps) {
+export default function GameScene({ stats, setStats, onDied, isPaused }: GameSceneProps) {
   const { camera } = useThree();
-  const [enemies, setEnemies] = useState<EnemyType[]>(() => spawnEnemies(ROUNDS_CONFIG[0].enemies, ROUNDS_CONFIG[0].frontOnly));
+  // Wave 1: front-only so player isn't ambushed immediately
+  const [enemies, setEnemies] = useState<EnemyType[]>(() => spawnEnemies(WAVE_SIZE, true));
   const [bullets, setBullets] = useState<BulletType[]>([]);
   const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
-  const [roundTransition, setRoundTransition] = useState(false);
 
   const playerPosRef = useRef(new THREE.Vector3(0, 1.7, 0));
   const statsRef = useRef(stats);
   const isDiedRef = useRef(false);
-  const roundTransitionRef = useRef(false);
-  const roundRef = useRef(1);
+  const waveTimerRef = useRef(0);   // counts up to WAVE_INTERVAL
+  const waveCountRef = useRef(1);   // current wave number
 
   statsRef.current = stats;
-  roundTransitionRef.current = roundTransition;
 
   useEffect(() => {
-    // Start at x=4, z=0 facing +Z (INITIAL_YAW = Math.PI).
     // Clear of the center corridor wall (x: -0.3–0.3, z: -6–6).
     camera.position.set(4, 1.7, 0);
     playerPosRef.current.set(4, 1.7, 0);
@@ -152,11 +141,23 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
   }, [setStats, addHitEffect]);
 
   useFrame((_, delta) => {
-    if (isDiedRef.current || roundTransitionRef.current || isPaused) return;
+    if (isDiedRef.current || isPaused) return;
 
     const dt = Math.min(delta, 0.05);
     const playerPos = playerPosRef.current;
     const now = Date.now() / 1000;
+
+    // Wave timer — every WAVE_INTERVAL seconds spawn WAVE_SIZE new enemies
+    waveTimerRef.current += dt;
+    let spawnWave: EnemyType[] | null = null;
+    if (waveTimerRef.current >= WAVE_INTERVAL) {
+      waveTimerRef.current -= WAVE_INTERVAL;
+      waveCountRef.current += 1;
+      const newWave = waveCountRef.current;
+      // Wave 1-2 are front-only; after that all directions
+      spawnWave = spawnEnemies(WAVE_SIZE, newWave <= 2);
+      setStats(s => ({ ...s, round: newWave }));
+    }
 
     // Update bullets
     setBullets(prev => {
@@ -232,96 +233,73 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
       return next;
     });
 
-    // Update enemies (patrol/chase/attack AI)
-    setEnemies(prev => prev.map(e => {
-      if (e.isDead) return e;
+    // Update enemies: AI + dead cleanup + wave spawn (single setState to avoid conflicts)
+    setEnemies(prev => {
+      const nowMs = Date.now();
+      // Remove corpses that have been dead long enough
+      const filtered = prev.filter(e => !(e.isDead && nowMs - e.lastHitTime > DEAD_CLEANUP_MS));
 
-      const ex = e.position[0];
-      const ez = e.position[2];
-      const dx = playerPos.x - ex;
-      const dz = playerPos.z - ez;
-      const distToPlayer = Math.sqrt(dx * dx + dz * dz);
+      const updated = filtered.map(e => {
+        if (e.isDead) return e;
 
-      let newState = e.state;
-      let newPos: [number, number, number] = [...e.position];
-      let newPatrol = e.patrolTarget;
-      let lastShotTime = e.lastShotTime;
+        const ex = e.position[0];
+        const ez = e.position[2];
+        const dx = playerPos.x - ex;
+        const dz = playerPos.z - ez;
+        const distToPlayer = Math.sqrt(dx * dx + dz * dz);
 
-      newState = distToPlayer < 18 ? "chase" : "patrol";
+        let newState = e.state;
+        let newPos: [number, number, number] = [...e.position];
+        let newPatrol = e.patrolTarget;
+        let lastShotTime = e.lastShotTime;
 
-      if (newState === "chase") {
-        if (distToPlayer < 12) {
-          newState = "attack";
-          if (now - lastShotTime > 1.4) {
-            lastShotTime = now;
-            const dir = new THREE.Vector3(dx, 0.1, dz).normalize();
-            const jitter = 0.08;
-            dir.x += (Math.random() - 0.5) * jitter;
-            dir.z += (Math.random() - 0.5) * jitter;
-            dir.normalize();
-            spawnBullet(new THREE.Vector3(ex, e.position[1], ez), dir, true);
+        newState = distToPlayer < 18 ? "chase" : "patrol";
+
+        if (newState === "chase") {
+          if (distToPlayer < 12) {
+            newState = "attack";
+            if (now - lastShotTime > 1.4) {
+              lastShotTime = now;
+              const dir = new THREE.Vector3(dx, 0.1, dz).normalize();
+              const jitter = 0.08;
+              dir.x += (Math.random() - 0.5) * jitter;
+              dir.z += (Math.random() - 0.5) * jitter;
+              dir.normalize();
+              spawnBullet(new THREE.Vector3(ex, e.position[1], ez), dir, true);
+            }
+          }
+          if (distToPlayer > 3) {
+            const speed = 2.5 * dt;
+            let nx = ex + (dx / distToPlayer) * speed;
+            let nz = ez + (dz / distToPlayer) * speed;
+            [nx, nz] = resolveCollisions(nx, nz, 0.35);
+            newPos = [nx, e.position[1], nz];
+          }
+        } else {
+          const ptx = newPatrol[0] - ex;
+          const ptz = newPatrol[1] - ez;
+          const ptDist = Math.sqrt(ptx * ptx + ptz * ptz);
+          if (ptDist < 1) {
+            let px = (Math.random() - 0.5) * 36;
+            let pz = (Math.random() - 0.5) * 36;
+            [px, pz] = resolveCollisions(px, pz, 0.5);
+            newPatrol = [px, pz];
+          } else {
+            const speed = 1.5 * dt;
+            let nx = ex + (ptx / ptDist) * speed;
+            let nz = ez + (ptz / ptDist) * speed;
+            [nx, nz] = resolveCollisions(nx, nz, 0.35);
+            newPos = [nx, e.position[1], nz];
           }
         }
-        if (distToPlayer > 3) {
-          const speed = 2.5 * dt;
-          let nx = ex + (dx / distToPlayer) * speed;
-          let nz = ez + (dz / distToPlayer) * speed;
-          [nx, nz] = resolveCollisions(nx, nz, 0.35);
-          newPos = [nx, e.position[1], nz];
-        }
-      } else {
-        const ptx = newPatrol[0] - ex;
-        const ptz = newPatrol[1] - ez;
-        const ptDist = Math.sqrt(ptx * ptx + ptz * ptz);
-        if (ptDist < 1) {
-          // Pick new patrol point away from walls
-          let px = (Math.random() - 0.5) * 36;
-          let pz = (Math.random() - 0.5) * 36;
-          [px, pz] = resolveCollisions(px, pz, 0.5);
-          newPatrol = [px, pz];
-        } else {
-          const speed = 1.5 * dt;
-          let nx = ex + (ptx / ptDist) * speed;
-          let nz = ez + (ptz / ptDist) * speed;
-          [nx, nz] = resolveCollisions(nx, nz, 0.35);
-          newPos = [nx, e.position[1], nz];
-        }
-      }
 
-      return { ...e, position: newPos, state: newState, patrolTarget: newPatrol, lastShotTime };
-    }));
+        return { ...e, position: newPos, state: newState, patrolTarget: newPatrol, lastShotTime };
+      });
+
+      // Append new wave if one spawned this frame
+      return spawnWave ? [...updated, ...spawnWave] : updated;
+    });
   });
-
-  // Check round completion
-  useEffect(() => {
-    const allDead = enemies.length > 0 && enemies.every(e => e.isDead);
-    if (allDead && !roundTransition && !isDiedRef.current) {
-      setRoundTransition(true);
-      const nextRound = roundRef.current + 1;
-      roundRef.current = nextRound;
-
-      if (nextRound > ROUNDS_CONFIG.length) {
-        setTimeout(onWon, 1500);
-      } else {
-        setTimeout(() => {
-          const config = ROUNDS_CONFIG[nextRound - 1];
-          setStats(s => ({
-            ...s,
-            round: nextRound,
-            health: 100,
-            armor: 100,
-            ammo: 100,
-            totalAmmo: 900,
-            score: s.score + 500,
-          }));
-          setEnemies(spawnEnemies(config.enemies, config.frontOnly));
-          setBullets([]);
-          setHitEffects([]);
-          setRoundTransition(false);
-        }, 2000);
-      }
-    }
-  }, [enemies, roundTransition, onWon, setStats]);
 
   return (
     <>
@@ -331,14 +309,6 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
       <directionalLight position={[-10, 10, -10]} intensity={0.25} color="#8099ff" />
       <hemisphereLight args={["#87ceeb", "#404040", 0.3]} />
       <fog args={["#0a1020", 30, 150]} />
-
-      {/* Round transition dark overlay */}
-      {roundTransition && (
-        <mesh position={[0, 0, -1]} renderOrder={999}>
-          <planeGeometry args={[200, 200]} />
-          <meshBasicMaterial color="#000000" transparent opacity={0.75} depthTest={false} />
-        </mesh>
-      )}
 
       <Map />
 

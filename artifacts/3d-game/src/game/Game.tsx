@@ -7,7 +7,7 @@ import Menu from "./Menu";
 import GameOver from "./GameOver";
 import PauseMenu from "./PauseMenu";
 
-export type GameState = "menu" | "playing" | "paused" | "dead" | "won";
+export type GameState = "menu" | "playing" | "paused" | "dead";
 export type WeaponType = "AK-47" | "Knife";
 export type FireMode = "auto" | "semi" | "single";
 
@@ -17,8 +17,7 @@ export interface GameStats {
   ammo: number;
   totalAmmo: number;
   kills: number;
-  round: number;
-  totalRounds: number;
+  round: number; // current wave number
   score: number;
   weapon: WeaponType;
   isReloading: boolean;
@@ -57,7 +56,6 @@ const DEFAULT_STATS: GameStats = {
   totalAmmo: 900,
   kills: 0,
   round: 1,
-  totalRounds: 100,
   score: 0,
   weapon: "AK-47",
   isReloading: false,
@@ -116,11 +114,9 @@ export default function Game() {
   }, []);
 
   const handleDied = useCallback(() => setGameState("dead"), []);
-  const handleWon = useCallback(() => setGameState("won"), []);
 
   if (gameState === "menu") return <Menu onStart={startGame} />;
   if (gameState === "dead") return <GameOver won={false} score={stats.score} kills={stats.kills} onRestart={startGame} />;
-  if (gameState === "won") return <GameOver won={true} score={stats.score} kills={stats.kills} onRestart={startGame} />;
 
   const isPaused = gameState === "paused";
 
@@ -138,7 +134,6 @@ export default function Game() {
             stats={stats}
             setStats={setStats}
             onDied={handleDied}
-            onWon={handleWon}
             isPaused={isPaused}
           />
         </Canvas>

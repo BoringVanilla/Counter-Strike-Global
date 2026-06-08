@@ -98,8 +98,8 @@ export default function Menu({ onStart }: MenuProps) {
           color: "#555",
         }}>
           <div style={{ color: "#ff6a00", marginBottom: "6px", fontWeight: 600, letterSpacing: "1px", textTransform: "uppercase", fontSize: "11px" }}>Objective</div>
-          Eliminate 100 rounds of enemies. Each round spawns more bots. 
-          Survive all 100 rounds to win. You get 100hp + 100 armor per round.
+          Ondas infinitas de inimigos — 5 novos a cada 5 segundos.
+          O jogo só termina se você morrer. Pause com ESC para sair.
         </div>
 
         <button
