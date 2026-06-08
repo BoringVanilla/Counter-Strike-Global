@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "nS9ua4FrUwyTi6eTV2N2E"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "cs2 mobile app icon"
