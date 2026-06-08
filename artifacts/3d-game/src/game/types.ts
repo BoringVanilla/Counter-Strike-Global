@@ -7,6 +7,7 @@ export interface Enemy {
   state: "patrol" | "chase" | "attack" | "dying";
   patrolTarget: [number, number];
   lastShotTime: number;
+  lastHitTime: number;
 }
 
 export interface Bullet {
@@ -19,8 +20,9 @@ export interface Bullet {
   maxDistance: number;
 }
 
-export interface HitMarker {
+export interface HitEffect {
   id: number;
+  position: [number, number, number];
   time: number;
   isKill: boolean;
 }
