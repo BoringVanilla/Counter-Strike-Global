@@ -20,6 +20,7 @@ export interface GameStats {
   score: number;
   weapon: WeaponType;
   isReloading: boolean;
+  damageFlash: number;
 }
 
 enum Controls {
@@ -59,6 +60,7 @@ export default function Game() {
     score: 0,
     weapon: "AK-47",
     isReloading: false,
+    damageFlash: 0,
   });
 
   const startGame = useCallback(() => {
@@ -73,6 +75,7 @@ export default function Game() {
       score: 0,
       weapon: "AK-47",
       isReloading: false,
+      damageFlash: 0,
     });
     setGameState("playing");
   }, []);

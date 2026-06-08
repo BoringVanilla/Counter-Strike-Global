@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { GameStats } from "./Game";
 
 interface HUDProps {
@@ -7,40 +8,76 @@ interface HUDProps {
 export default function HUD({ stats }: HUDProps) {
   const healthColor = stats.health > 50 ? "#00ff88" : stats.health > 25 ? "#ffaa00" : "#ff3344";
   const isKnife = stats.weapon === "Knife";
+  const isLowHealth = stats.health <= 30;
+
+  // Damage vignette
+  const [damageVignette, setDamageVignette] = useState(false);
+  useEffect(() => {
+    if (stats.damageFlash > 0) {
+      setDamageVignette(true);
+      const t = setTimeout(() => setDamageVignette(false), 400);
+      return () => clearTimeout(t);
+    }
+  }, [stats.damageFlash]);
 
   return (
-    <div style={{
-      position: "fixed",
-      inset: 0,
-      pointerEvents: "none",
-      fontFamily: "'Segoe UI', sans-serif",
-      color: "#fff",
-    }}>
-      {/* Crosshair — smaller dot for knife */}
+    <div style={{ position: "fixed", inset: 0, pointerEvents: "none", fontFamily: "'Segoe UI', sans-serif", color: "#fff" }}>
+
+      {/* Damage vignette overlay */}
+      <div style={{
+        position: "absolute",
+        inset: 0,
+        background: damageVignette
+          ? "radial-gradient(ellipse at center, transparent 30%, rgba(200,0,0,0.55) 100%)"
+          : "transparent",
+        transition: "background 0.08s ease",
+        pointerEvents: "none",
+        zIndex: 10,
+      }} />
+
+      {/* Low health pulse vignette */}
+      {isLowHealth && (
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          background: "radial-gradient(ellipse at center, transparent 40%, rgba(180,0,0,0.28) 100%)",
+          animation: "lowHealthPulse 1s ease-in-out infinite",
+          pointerEvents: "none",
+          zIndex: 9,
+        }} />
+      )}
+
+      {/* Crosshair */}
       <div style={{
         position: "absolute",
         left: "50%",
         top: "50%",
         transform: "translate(-50%, -50%)",
-        width: "20px",
-        height: "20px",
+        width: "22px",
+        height: "22px",
       }}>
         {isKnife ? (
           <div style={{
             position: "absolute",
             left: "50%",
             top: "50%",
-            width: "6px",
-            height: "6px",
+            width: "8px",
+            height: "8px",
             borderRadius: "50%",
             border: "2px solid #ffcc44",
             transform: "translate(-50%, -50%)",
+            boxShadow: "0 0 6px #ffcc44",
           }} />
         ) : (
           <>
-            <div style={{ position: "absolute", left: "50%", top: "50%", width: "2px", height: "10px", background: "#00ff88", transform: "translate(-50%, -50%)" }} />
-            <div style={{ position: "absolute", left: "50%", top: "50%", width: "10px", height: "2px", background: "#00ff88", transform: "translate(-50%, -50%)" }} />
-            <div style={{ position: "absolute", left: "50%", top: "50%", width: "4px", height: "4px", borderRadius: "50%", border: "1.5px solid #00ff88", transform: "translate(-50%, -50%)", background: "transparent" }} />
+            {/* Top */}
+            <div style={{ position: "absolute", left: "50%", top: "0", width: "2px", height: "7px", background: "#00ff88", transform: "translateX(-50%)" }} />
+            {/* Bottom */}
+            <div style={{ position: "absolute", left: "50%", bottom: "0", width: "2px", height: "7px", background: "#00ff88", transform: "translateX(-50%)" }} />
+            {/* Left */}
+            <div style={{ position: "absolute", top: "50%", left: "0", width: "7px", height: "2px", background: "#00ff88", transform: "translateY(-50%)" }} />
+            {/* Right */}
+            <div style={{ position: "absolute", top: "50%", right: "0", width: "7px", height: "2px", background: "#00ff88", transform: "translateY(-50%)" }} />
           </>
         )}
       </div>
@@ -88,7 +125,7 @@ export default function HUD({ stats }: HUDProps) {
         </div>
       )}
 
-      {/* Weapon switcher hint - bottom center */}
+      {/* Weapon switcher - bottom center */}
       <div style={{
         position: "absolute",
         bottom: "24px",
@@ -109,6 +146,7 @@ export default function HUD({ stats }: HUDProps) {
             alignItems: "center",
             gap: "2px",
             transition: "all 0.15s ease",
+            boxShadow: stats.weapon === w ? "0 0 10px rgba(255,106,0,0.25)" : "none",
           }}>
             <span style={{ fontSize: "14px" }}>{w === "AK-47" ? "🔫" : "🔪"}</span>
             <span style={{ fontSize: "9px", color: stats.weapon === w ? "#ff6a00" : "#555", letterSpacing: "1px", textTransform: "uppercase" }}>{w}</span>
@@ -117,21 +155,22 @@ export default function HUD({ stats }: HUDProps) {
         <span style={{ fontSize: "10px", color: "#444", letterSpacing: "1px" }}>Q</span>
       </div>
 
-      {/* Bottom left - Health & Armor */}
-      <div style={{
-        position: "absolute",
-        bottom: "24px",
-        left: "24px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "6px",
-      }}>
+      {/* Bottom left — Health & Armor */}
+      <div style={{ position: "absolute", bottom: "24px", left: "24px", display: "flex", flexDirection: "column", gap: "6px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{ fontSize: "11px", color: "#666", width: "12px" }}>♥</div>
           <div style={{ width: "120px", height: "4px", background: "rgba(255,255,255,0.1)", borderRadius: "2px", overflow: "hidden" }}>
             <div style={{ width: `${stats.health}%`, height: "100%", background: healthColor, transition: "width 0.15s ease", borderRadius: "2px" }} />
           </div>
-          <span style={{ fontSize: "18px", fontWeight: 700, color: healthColor, minWidth: "36px" }}>{stats.health}</span>
+          <span style={{
+            fontSize: "18px",
+            fontWeight: 700,
+            color: healthColor,
+            minWidth: "36px",
+            animation: isLowHealth ? "lowHealthPulse 1s ease-in-out infinite" : "none",
+          }}>
+            {stats.health}
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{ fontSize: "11px", color: "#666", width: "12px" }}>⬡</div>
@@ -142,25 +181,20 @@ export default function HUD({ stats }: HUDProps) {
         </div>
       </div>
 
-      {/* Bottom right - Weapon & Ammo */}
-      <div style={{
-        position: "absolute",
-        bottom: "24px",
-        right: "24px",
-        textAlign: "right",
-      }}>
-        <div style={{ fontSize: "11px", color: isKnife ? "#ffcc44" : "#666", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px", transition: "color 0.2s" }}>
+      {/* Bottom right — Weapon & Ammo */}
+      <div style={{ position: "absolute", bottom: "24px", right: "24px", textAlign: "right" }}>
+        <div style={{
+          fontSize: "11px",
+          color: isKnife ? "#ffcc44" : "#666",
+          letterSpacing: "2px",
+          textTransform: "uppercase",
+          marginBottom: "4px",
+          transition: "color 0.2s",
+        }}>
           {stats.weapon}
         </div>
-
         {isKnife ? (
-          <div style={{
-            fontSize: "13px",
-            color: "#ffcc44",
-            letterSpacing: "2px",
-            textTransform: "uppercase",
-            marginTop: "4px",
-          }}>
+          <div style={{ fontSize: "13px", color: "#ffcc44", letterSpacing: "2px", textTransform: "uppercase", marginTop: "4px" }}>
             Click to stab
           </div>
         ) : (
@@ -172,6 +206,7 @@ export default function HUD({ stats }: HUDProps) {
                 color: stats.ammo <= 5 ? "#ff3344" : "#fff",
                 lineHeight: 1,
                 transition: "color 0.2s",
+                animation: stats.ammo <= 5 && stats.ammo > 0 ? "lowHealthPulse 0.8s ease-in-out infinite" : "none",
               }}>
                 {stats.ammo}
               </span>
@@ -179,13 +214,7 @@ export default function HUD({ stats }: HUDProps) {
               <span style={{ fontSize: "18px", color: "#666" }}>{stats.totalAmmo}</span>
             </div>
             {stats.isReloading && (
-              <div style={{
-                fontSize: "11px",
-                color: "#ffaa00",
-                letterSpacing: "3px",
-                textTransform: "uppercase",
-                animation: "pulse 0.6s ease-in-out infinite",
-              }}>
+              <div style={{ fontSize: "11px", color: "#ffaa00", letterSpacing: "3px", textTransform: "uppercase", animation: "reloadPulse 0.5s ease-in-out infinite" }}>
                 Reloading...
               </div>
             )}
@@ -199,9 +228,13 @@ export default function HUD({ stats }: HUDProps) {
       </div>
 
       <style>{`
-        @keyframes pulse {
+        @keyframes reloadPulse {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
+          50% { opacity: 0.35; }
+        }
+        @keyframes lowHealthPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.45; }
         }
       `}</style>
     </div>

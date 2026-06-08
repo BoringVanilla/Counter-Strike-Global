@@ -31,12 +31,16 @@ const KNIFE_SPRINT_SPEED = 16;
 const JUMP_FORCE = 6;
 const GRAVITY = -18;
 const RELOAD_TIME = 2000;
+const BOB_FREQ = 10;
+const BOB_AMP = 0.032;
 
 function clampToMap(x: number, z: number): [number, number] {
   return [Math.max(-21.5, Math.min(21.5, x)), Math.max(-21.5, Math.min(21.5, z))];
 }
 
-export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, stats, setStats }: PlayerControllerProps) {
+export default function PlayerController({
+  playerPosRef, onShoot, onKnifeStab, stats, setStats,
+}: PlayerControllerProps) {
   const { camera, gl } = useThree();
   const [, getKeys] = useKeyboardControls<Controls>();
 
@@ -50,6 +54,22 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statsRef = useRef(stats);
   const qWasDownRef = useRef(false);
+
+  // Head bob state
+  const bobTimeRef = useRef(0);
+  const bobTargetRef = useRef(0);
+  const bobCurrentRef = useRef(0);
+  const landBounceRef = useRef(0);
+  const wasOnGroundRef = useRef(true);
+
+  // Camera shake
+  const shakeRef = useRef(0);
+  const shakeXRef = useRef(0);
+  const shakeYRef = useRef(0);
+
+  // Track damage flash changes for shake trigger
+  const lastDamageFlashRef = useRef(0);
+
   statsRef.current = stats;
 
   const [locked, setLocked] = useState(false);
@@ -59,7 +79,6 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
   // Pointer lock
   useEffect(() => {
     const canvas = gl.domElement;
-
     const onMouseMove = (e: MouseEvent) => {
       if (!isLockedRef.current) return;
       const sens = 0.0018;
@@ -67,21 +86,15 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
       pitchRef.current -= e.movementY * sens;
       pitchRef.current = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitchRef.current));
     };
-
     const onLockChange = () => {
       const isLocked = document.pointerLockElement === canvas;
       isLockedRef.current = isLocked;
       setLocked(isLocked);
     };
-
-    const onClick = () => {
-      if (!isLockedRef.current) canvas.requestPointerLock();
-    };
-
+    const onClick = () => { if (!isLockedRef.current) canvas.requestPointerLock(); };
     canvas.addEventListener("click", onClick);
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("pointerlockchange", onLockChange);
-
     return () => {
       canvas.removeEventListener("click", onClick);
       document.removeEventListener("mousemove", onMouseMove);
@@ -94,9 +107,7 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
     const handleMouseDown = (e: MouseEvent) => {
       if (!isLockedRef.current || e.button !== 0) return;
       const s = statsRef.current;
-
       if (s.weapon === "Knife") {
-        // Knife melee
         const now = Date.now();
         if (now - lastKnifeRef.current < 600) return;
         lastKnifeRef.current = now;
@@ -105,7 +116,6 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
         onKnifeStab(camera.position.clone(), dir);
       } else {
-        // AK-47 shoot
         if (s.ammo <= 0 || s.isReloading) return;
         const now = Date.now();
         if (now - lastShotRef.current < 90) return;
@@ -113,6 +123,8 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
         setIsShooting(true);
         setTimeout(() => setIsShooting(false), 80);
         setStats(prev => ({ ...prev, ammo: Math.max(0, prev.ammo - 1) }));
+        // Camera shake on shoot
+        shakeRef.current = Math.max(shakeRef.current, 0.04);
         const pos = camera.position.clone();
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
         const spread = 0.012;
@@ -126,7 +138,7 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, [camera, onShoot, onKnifeStab, setStats]);
 
-  // Reload keybinding (R)
+  // Reload keybinding
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "KeyR") {
@@ -149,7 +161,7 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
     };
   }, [setStats]);
 
-  // Auto-reload when ammo hits 0
+  // Auto-reload
   useEffect(() => {
     if (stats.ammo === 0 && !stats.isReloading && stats.totalAmmo > 0 && stats.weapon === "AK-47") {
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
@@ -164,26 +176,35 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
     }
   }, [stats.ammo, stats.isReloading, stats.totalAmmo, stats.weapon, setStats]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05);
+    const t = state.clock.elapsedTime;
     const keys = getKeys();
     const isSprinting = keys.sprint;
 
-    // Q weapon switch (edge detection — only trigger once per press)
+    // Q weapon switch (edge detection)
     const qDown = keys.switchWeapon;
     if (qDown && !qWasDownRef.current) {
       setStats(prev => {
         const next: WeaponType = prev.weapon === "AK-47" ? "Knife" : "AK-47";
         return { ...prev, weapon: next, isReloading: false };
       });
-      if (reloadTimerRef.current) {
-        clearTimeout(reloadTimerRef.current);
-        reloadTimerRef.current = null;
-      }
+      if (reloadTimerRef.current) { clearTimeout(reloadTimerRef.current); reloadTimerRef.current = null; }
     }
     qWasDownRef.current = qDown;
 
-    // Camera rotation from mouse
+    // Detect damage for camera shake
+    if (stats.damageFlash !== lastDamageFlashRef.current) {
+      lastDamageFlashRef.current = stats.damageFlash;
+      shakeRef.current = 0.14;
+    }
+
+    // Decay shake
+    shakeRef.current = THREE.MathUtils.lerp(shakeRef.current, 0, 1 - Math.pow(0.001, dt));
+    shakeXRef.current = (Math.random() - 0.5) * shakeRef.current;
+    shakeYRef.current = (Math.random() - 0.5) * shakeRef.current;
+
+    // Camera rotation
     const euler = new THREE.Euler(pitchRef.current, yawRef.current, 0, "YXZ");
     camera.quaternion.setFromEuler(euler);
 
@@ -191,17 +212,16 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
     const forward = new THREE.Vector3(-Math.sin(yawRef.current), 0, -Math.cos(yawRef.current));
     const right = new THREE.Vector3(Math.cos(yawRef.current), 0, -Math.sin(yawRef.current));
 
-    let moveX = 0;
-    let moveZ = 0;
+    let moveX = 0, moveZ = 0;
     if (keys.forward) { moveX += forward.x; moveZ += forward.z; }
-    if (keys.back) { moveX -= forward.x; moveZ -= forward.z; }
-    if (keys.left) { moveX -= right.x; moveZ -= right.z; }
-    if (keys.right) { moveX += right.x; moveZ += right.z; }
+    if (keys.back)    { moveX -= forward.x; moveZ -= forward.z; }
+    if (keys.left)    { moveX -= right.x;   moveZ -= right.z; }
+    if (keys.right)   { moveX += right.x;   moveZ += right.z; }
 
     const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
-    if (len > 0) { moveX /= len; moveZ /= len; }
+    const isMoving = len > 0;
+    if (isMoving) { moveX /= len; moveZ /= len; }
 
-    // Knife allows faster movement
     const baseSpeed = stats.weapon === "Knife" ? KNIFE_SPRINT_SPEED : MOVE_SPEED;
     const speed = isSprinting ? Math.max(baseSpeed, SPRINT_SPEED) : baseSpeed;
     let nx = camera.position.x + moveX * speed * dt;
@@ -216,14 +236,36 @@ export default function PlayerController({ playerPosRef, onShoot, onKnifeStab, s
     // Gravity
     velocityY.current += GRAVITY * dt;
     let ny = camera.position.y + velocityY.current * dt;
+
+    // Landing bounce
+    const wasGrounded = wasOnGroundRef.current;
     if (ny <= PLAYER_HEIGHT) {
+      if (!wasGrounded) landBounceRef.current = -0.05; // landing dip
       ny = PLAYER_HEIGHT;
       velocityY.current = 0;
       onGround.current = true;
     }
+    wasOnGroundRef.current = onGround.current;
+    landBounceRef.current = THREE.MathUtils.lerp(landBounceRef.current, 0, 1 - Math.pow(0.001, dt));
+
+    // Head bob
+    if (isMoving && onGround.current) {
+      bobTimeRef.current += dt * BOB_FREQ * (isSprinting ? 1.3 : 1);
+      bobTargetRef.current = Math.sin(bobTimeRef.current) * BOB_AMP;
+    } else {
+      bobTargetRef.current = THREE.MathUtils.lerp(bobTargetRef.current, 0, 1 - Math.pow(0.001, dt));
+    }
+    bobCurrentRef.current = THREE.MathUtils.lerp(bobCurrentRef.current, bobTargetRef.current, 1 - Math.pow(0.0001, dt));
+
+    // Air wobble
+    const airWobble = onGround.current ? 0 : Math.sin(t * 4) * 0.005;
 
     const [cx, cz] = clampToMap(nx, nz);
-    camera.position.set(cx, ny, cz);
+    camera.position.set(
+      cx + shakeXRef.current,
+      ny + bobCurrentRef.current + landBounceRef.current + airWobble,
+      cz + shakeYRef.current * 0.5,
+    );
     playerPosRef.current.set(cx, ny, cz);
   });
 
