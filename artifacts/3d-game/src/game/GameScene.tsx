@@ -14,6 +14,7 @@ interface GameSceneProps {
   setStats: React.Dispatch<React.SetStateAction<GameStats>>;
   onDied: () => void;
   onWon: () => void;
+  isPaused: boolean;
 }
 
 const KNIFE_RANGE = 2.2;
@@ -57,7 +58,7 @@ function spawnEnemies(count: number): EnemyType[] {
   return enemies;
 }
 
-export default function GameScene({ stats, setStats, onDied, onWon }: GameSceneProps) {
+export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: GameSceneProps) {
   const { camera } = useThree();
   const [enemies, setEnemies] = useState<EnemyType[]>(() => spawnEnemies(ROUNDS_CONFIG[0].enemies));
   const [bullets, setBullets] = useState<BulletType[]>([]);
@@ -137,7 +138,7 @@ export default function GameScene({ stats, setStats, onDied, onWon }: GameSceneP
   }, [setStats, addHitEffect]);
 
   useFrame((_, delta) => {
-    if (isDiedRef.current || roundTransitionRef.current) return;
+    if (isDiedRef.current || roundTransitionRef.current || isPaused) return;
 
     const dt = Math.min(delta, 0.05);
     const playerPos = playerPosRef.current;

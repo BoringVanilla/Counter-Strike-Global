@@ -1,12 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { KeyboardControls } from "@react-three/drei";
 import GameScene from "./GameScene";
 import HUD from "./HUD";
 import Menu from "./Menu";
 import GameOver from "./GameOver";
+import PauseMenu from "./PauseMenu";
 
-export type GameState = "menu" | "playing" | "dead" | "won";
+export type GameState = "menu" | "playing" | "paused" | "dead" | "won";
 export type WeaponType = "AK-47" | "Knife";
 
 export interface GameStats {
@@ -47,37 +48,63 @@ const keyMap = [
   { name: Controls.switchWeapon, keys: ["KeyQ"] },
 ];
 
+const DEFAULT_STATS: GameStats = {
+  health: 100,
+  armor: 100,
+  ammo: 30,
+  totalAmmo: 90,
+  kills: 0,
+  round: 1,
+  totalRounds: 5,
+  score: 0,
+  weapon: "AK-47",
+  isReloading: false,
+  damageFlash: 0,
+};
+
 export default function Game() {
   const [gameState, setGameState] = useState<GameState>("menu");
-  const [stats, setStats] = useState<GameStats>({
-    health: 100,
-    armor: 100,
-    ammo: 30,
-    totalAmmo: 90,
-    kills: 0,
-    round: 1,
-    totalRounds: 5,
-    score: 0,
-    weapon: "AK-47",
-    isReloading: false,
-    damageFlash: 0,
-  });
+  const [stats, setStats] = useState<GameStats>(DEFAULT_STATS);
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
+
+  // Detect ESC / pointer lock release → pause
+  useEffect(() => {
+    const handleLockChange = () => {
+      if (!document.pointerLockElement && gameStateRef.current === "playing") {
+        setGameState("paused");
+      }
+    };
+    document.addEventListener("pointerlockchange", handleLockChange);
+    return () => document.removeEventListener("pointerlockchange", handleLockChange);
+  }, []);
 
   const startGame = useCallback(() => {
-    setStats({
-      health: 100,
-      armor: 100,
-      ammo: 30,
-      totalAmmo: 90,
-      kills: 0,
-      round: 1,
-      totalRounds: 5,
-      score: 0,
-      weapon: "AK-47",
-      isReloading: false,
-      damageFlash: 0,
-    });
+    setStats(DEFAULT_STATS);
     setGameState("playing");
+  }, []);
+
+  const handleResume = useCallback(() => {
+    setGameState("playing");
+    // Re-request pointer lock so the game resumes
+    setTimeout(() => {
+      const canvas = document.querySelector("canvas");
+      canvas?.requestPointerLock();
+    }, 50);
+  }, []);
+
+  const handleRestart = useCallback(() => {
+    setStats(DEFAULT_STATS);
+    setGameState("playing");
+    setTimeout(() => {
+      const canvas = document.querySelector("canvas");
+      canvas?.requestPointerLock();
+    }, 100);
+  }, []);
+
+  const handleExit = useCallback(() => {
+    document.exitPointerLock();
+    setGameState("menu");
   }, []);
 
   const handleDied = useCallback(() => setGameState("dead"), []);
@@ -86,6 +113,8 @@ export default function Game() {
   if (gameState === "menu") return <Menu onStart={startGame} />;
   if (gameState === "dead") return <GameOver won={false} score={stats.score} kills={stats.kills} onRestart={startGame} />;
   if (gameState === "won") return <GameOver won={true} score={stats.score} kills={stats.kills} onRestart={startGame} />;
+
+  const isPaused = gameState === "paused";
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", background: "#000" }}>
@@ -102,10 +131,20 @@ export default function Game() {
             setStats={setStats}
             onDied={handleDied}
             onWon={handleWon}
+            isPaused={isPaused}
           />
         </Canvas>
       </KeyboardControls>
-      <HUD stats={stats} />
+
+      {!isPaused && <HUD stats={stats} />}
+
+      {isPaused && (
+        <PauseMenu
+          onResume={handleResume}
+          onRestart={handleRestart}
+          onExit={handleExit}
+        />
+      )}
     </div>
   );
 }
