@@ -21,13 +21,16 @@ interface GameSceneProps {
 const KNIFE_RANGE = 2.2;
 const KNIFE_DAMAGE = 55;
 
-const ROUNDS_CONFIG = [
-  { enemies: 3, frontOnly: true  }, // Round 1 — all in front
-  { enemies: 4, frontOnly: true  }, // Round 2 — still in front
-  { enemies: 5, frontOnly: false }, // Round 3+ — all directions
-  { enemies: 6, frontOnly: false },
-  { enemies: 8, frontOnly: false },
-];
+// 100 rounds — scales from 3 enemies (front-only) up to 12 enemies (all dirs)
+const ROUNDS_CONFIG: { enemies: number; frontOnly: boolean }[] = Array.from(
+  { length: 100 },
+  (_, i) => {
+    const round = i + 1;
+    const frontOnly = round <= 2;
+    const enemies = Math.min(12, 3 + Math.floor((round - 1) * 0.1));
+    return { enemies, frontOnly };
+  },
+);
 
 // Start from random offsets so HMR reloads don't cause key collisions with
 // enemies/bullets still alive in React state from the previous module instance.
@@ -307,8 +310,8 @@ export default function GameScene({ stats, setStats, onDied, onWon, isPaused }: 
             round: nextRound,
             health: 100,
             armor: 100,
-            ammo: 30,
-            totalAmmo: 90,
+            ammo: 100,
+            totalAmmo: 900,
             score: s.score + 500,
           }));
           setEnemies(spawnEnemies(config.enemies, config.frontOnly));

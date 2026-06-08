@@ -182,11 +182,11 @@ export default function PlayerController({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "KeyR") {
         const s = statsRef.current;
-        if (s.weapon === "Knife" || s.isReloading || s.ammo === 30 || s.totalAmmo === 0) return;
+        if (s.weapon === "Knife" || s.isReloading || s.ammo === 100 || s.totalAmmo === 0) return;
         setStats(prev => ({ ...prev, isReloading: true }));
         reloadTimerRef.current = setTimeout(() => {
           setStats(prev => {
-            const needed = 30 - prev.ammo;
+            const needed = 100 - prev.ammo;
             const take = Math.min(needed, prev.totalAmmo);
             return { ...prev, ammo: prev.ammo + take, totalAmmo: prev.totalAmmo - take, isReloading: false };
           });
@@ -215,7 +215,7 @@ export default function PlayerController({
       setStats(prev => ({ ...prev, isReloading: true }));
       reloadTimerRef.current = setTimeout(() => {
         setStats(prev => {
-          const needed = 30 - prev.ammo;
+          const needed = 100 - prev.ammo;
           const take = Math.min(needed, prev.totalAmmo);
           return { ...prev, ammo: prev.ammo + take, totalAmmo: prev.totalAmmo - take, isReloading: false };
         });
