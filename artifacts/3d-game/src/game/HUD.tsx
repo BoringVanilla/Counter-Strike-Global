@@ -181,20 +181,51 @@ export default function HUD({ stats }: HUDProps) {
         </div>
       </div>
 
-      {/* Bottom right — Weapon & Ammo */}
+      {/* Bottom right — Weapon, Fire Mode & Ammo */}
       <div style={{ position: "absolute", bottom: "24px", right: "24px", textAlign: "right" }}>
+        {/* Weapon name */}
         <div style={{
           fontSize: "11px",
           color: isKnife ? "#ffcc44" : "#666",
           letterSpacing: "2px",
           textTransform: "uppercase",
-          marginBottom: "4px",
+          marginBottom: "6px",
           transition: "color 0.2s",
         }}>
           {stats.weapon}
         </div>
+
+        {/* Fire mode selector (AK-47 only) */}
+        {!isKnife && (
+          <div style={{ display: "flex", gap: "4px", justifyContent: "flex-end", marginBottom: "8px" }}>
+            {(["auto", "semi", "single"] as const).map(mode => {
+              const labels = { auto: "AUTO", semi: "SEMI", single: "ÚNICO" };
+              const colors = { auto: "#ff4444", semi: "#ffaa00", single: "#44aaff" };
+              const isActive = stats.fireMode === mode;
+              return (
+                <div key={mode} style={{
+                  padding: "2px 7px",
+                  borderRadius: "3px",
+                  fontSize: "9px",
+                  fontWeight: 700,
+                  letterSpacing: "1px",
+                  textTransform: "uppercase",
+                  border: `1px solid ${isActive ? colors[mode] : "rgba(255,255,255,0.1)"}`,
+                  background: isActive ? `${colors[mode]}22` : "rgba(0,0,0,0.3)",
+                  color: isActive ? colors[mode] : "#444",
+                  transition: "all 0.15s ease",
+                  boxShadow: isActive ? `0 0 6px ${colors[mode]}55` : "none",
+                }}>
+                  {labels[mode]}
+                </div>
+              );
+            })}
+            <div style={{ fontSize: "9px", color: "#333", letterSpacing: "1px", alignSelf: "center", marginLeft: "4px" }}>F</div>
+          </div>
+        )}
+
         {isKnife ? (
-          <div style={{ fontSize: "13px", color: "#ffcc44", letterSpacing: "2px", textTransform: "uppercase", marginTop: "4px" }}>
+          <div style={{ fontSize: "13px", color: "#ffcc44", letterSpacing: "2px", textTransform: "uppercase" }}>
             Click to stab
           </div>
         ) : (
