@@ -37,19 +37,22 @@ const BOB_FREQ = 10;
 const BOB_AMP = 0.03;
 const MOUSE_SENSITIVITY = 0.0015;
 
-// Fire mode cooldowns in ms
+// Fire mode cooldowns in ms (time between triggers / between bursts)
 const FIRE_COOLDOWN: Record<FireMode, number> = {
   auto: 90,
-  semi: 180,
-  single: 600,
+  semi: 700,   // cooldown between bursts
+  single: 400, // cooldown between single shots
 };
 
 // Bullet spread per mode
 const FIRE_SPREAD: Record<FireMode, number> = {
-  auto: 0.014,
-  semi: 0.007,
+  auto:   0.014,
+  semi:   0.009,
   single: 0.002,
 };
+
+const SEMI_BURST_COUNT = 6;
+const SEMI_BURST_INTERVAL = 55; // ms between bullets in burst
 
 const INITIAL_YAW = Math.PI; // Player faces +Z (toward center)
 
@@ -146,13 +149,21 @@ export default function PlayerController({
         onKnifeStab(camera.position.clone(), dir);
         return;
       }
-      // Semi / single: fire immediately on click, auto fires via useFrame
+      // Semi / single: fire on click; auto fires via useFrame
       const mode = s.fireMode;
-      if (mode !== "auto") {
+      if (mode === "single") {
         const now = Date.now();
-        if (now - lastShotMsRef.current < FIRE_COOLDOWN[mode]) return;
+        if (now - lastShotMsRef.current < FIRE_COOLDOWN.single) return;
         lastShotMsRef.current = now;
-        fireOnce(FIRE_SPREAD[mode]);
+        fireOnce(FIRE_SPREAD.single);
+      } else if (mode === "semi") {
+        const now = Date.now();
+        if (now - lastShotMsRef.current < FIRE_COOLDOWN.semi) return;
+        lastShotMsRef.current = now;
+        // Fire burst of 6 bullets with small interval between each
+        for (let i = 0; i < SEMI_BURST_COUNT; i++) {
+          setTimeout(() => fireOnce(FIRE_SPREAD.semi), i * SEMI_BURST_INTERVAL);
+        }
       }
     };
     const onUp = (e: MouseEvent) => {

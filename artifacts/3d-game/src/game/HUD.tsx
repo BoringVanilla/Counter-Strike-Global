@@ -199,7 +199,7 @@ export default function HUD({ stats }: HUDProps) {
         {!isKnife && (
           <div style={{ display: "flex", gap: "4px", justifyContent: "flex-end", marginBottom: "8px" }}>
             {(["auto", "semi", "single"] as const).map(mode => {
-              const labels = { auto: "AUTO", semi: "SEMI", single: "ÚNICO" };
+              const labels = { auto: "AUTO", semi: "SEMI", single: "MANUAL" };
               const colors = { auto: "#ff4444", semi: "#ffaa00", single: "#44aaff" };
               const isActive = stats.fireMode === mode;
               return (

@@ -92,7 +92,7 @@ export default function Map() {
 
       {/* Cover boxes */}
       {decorations.map((d, i) => (
-        <Box key={i} pos={d.pos} size={d.size} color={d.color} />
+        <Box key={i} position={d.pos} size={d.size} color={d.color} />
       ))}
 
       {/* Sandbag-style cover */}
