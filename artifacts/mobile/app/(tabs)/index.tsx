@@ -1,10 +1,11 @@
-import { StyleSheet, Text, View } from "react-native";
+import React from "react";
+import { StyleSheet, View } from "react-native";
+import Game from "@/components/Game";
 
-export default function TabOneScreen() {
+export default function GameScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Replit Agent is building...</Text>
-      <Text style={styles.text}>Your app will appear here once it's ready.</Text>
+      <Game />
     </View>
   );
 }
@@ -12,17 +13,6 @@ export default function TabOneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  text: {
-    fontSize: 16,
-    textAlign: "center",
-    paddingHorizontal: 20,
+    backgroundColor: "#0a0c10",
   },
 });

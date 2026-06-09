@@ -19,7 +19,7 @@ interface GameSceneProps {
 
 const KNIFE_RANGE = 2.2;
 const KNIFE_DAMAGE = 55;
-const WAVE_INTERVAL = 5;   // seconds between waves
+const WAVE_INTERVAL = 25;  // seconds between waves
 const WAVE_SIZE = 5;        // enemies per wave
 const DEAD_CLEANUP_MS = 3000; // remove corpses after 3s
 
