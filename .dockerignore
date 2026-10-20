@@ -1,0 +1,36 @@
+# Build context for the game-site image.
+#
+# The image only ships the game site (artifacts/3d-game) plus the
+# @workspace/api-client-react manifest it depends on. The API server,
+# the database layer and the mobile app are intentionally left out.
+
+# VCS / editor / tooling
+.git
+.gitignore
+.vscode
+.idea
+.agents
+
+# dependencies and build output (regenerated inside the image)
+node_modules
+**/node_modules
+dist
+**/dist
+tmp
+*.tsbuildinfo
+
+# Replit specifics
+.replit
+.replitignore
+.replit-artifact
+.local
+.cache
+
+# not needed by the game site
+artifacts/api-server
+artifacts/mobile
+artifacts/mockup-sandbox
+lib/api-spec
+lib/api-zod
+lib/db
+scripts

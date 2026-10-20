@@ -1,0 +1,56 @@
+# Docker setup for the CS2 Replica game site.
+#
+# The game is a static, client-side React Three Fiber app, so this file only
+# ships one service: nginx serving the Vite build. There is no API server and
+# no database here on purpose.
+#
+#   docker compose up -d --build     -> http://localhost:8080
+#   docker compose --profile dev up  -> http://localhost:5173 (HMR)
+
+name: cs2-replica
+
+services:
+  # Production: static build served by nginx.
+  game:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runtime
+      args:
+        BASE_PATH: ${GAME_BASE_PATH:-/}
+    image: cs2-replica/game:latest
+    container_name: cs2-replica-game
+    ports:
+      - "${GAME_PORT:-8080}:80"
+    restart: unless-stopped
+
+  # Development: Vite dev server with hot reload.
+  # The source is bind-mounted; node_modules is kept in named volumes so the
+  # container does not lose the installed dependencies.
+  game-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+      args:
+        PORT: "5173"
+    image: cs2-replica/game-dev:latest
+    container_name: cs2-replica-game-dev
+    ports:
+      - "${GAME_DEV_PORT:-5173}:5173"
+    environment:
+      PORT: "5173"
+      BASE_PATH: "/"
+      NODE_ENV: "development"
+    volumes:
+      - ./artifacts/3d-game:/app/artifacts/3d-game
+      - game-dev-root-modules:/app/node_modules
+      - game-dev-pkg-modules:/app/artifacts/3d-game/node_modules
+    command: sh -c "pnpm --filter @workspace/3d-game run dev"
+    stdin_open: true
+    tty: true
+
+volumes:
+  game-dev-root-modules:
+  game-dev-pkg-modules:

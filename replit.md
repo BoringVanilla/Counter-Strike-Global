@@ -5,11 +5,22 @@ _Replace the heading above with the project's name, and this line with one sente
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/3d-game run dev` — run the game site (Vite, port 24982)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+
+### Docker (somente o site do jogo)
+
+The game site runs standalone in Docker — no API server, no database:
+
+- `./scripts/docker-game.sh up` — build + serve the game site on http://localhost:8080
+- `./scripts/docker-game.sh dev` — Vite dev server with HMR on http://localhost:5173
+- `./scripts/docker-game.sh down` / `restart` / `logs` / `status` / `shell` / `clean`
+
+See `docker/README.md` for details.
 
 ## Stack
 
